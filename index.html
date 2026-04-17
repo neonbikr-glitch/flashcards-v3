@@ -2,10 +2,8 @@
 <html lang="en">
 <head>
 
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Flashcards">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f0f0f">
 
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -603,7 +601,6 @@
       <div class="right">
         <button id="groupFilterBtn" class="pill-btn" aria-label="Choose groups">Groups</button>
         <button id="addWordBtn" class="pill-btn" aria-label="Add word">+ Add word</button>
-        <button id="authBtn" class="pill-btn" aria-label="Login or sign out">Login</button>
       </div>
     </header>
 
@@ -678,7 +675,7 @@
           <button type="button" id="cancelModalBtn" class="modal-action cancel">Cancel</button>
           <button type="submit" class="modal-action save">Save</button>
         </div>
-        <div class="tiny">Words sync to your account after login.</div>
+        <div class="tiny">Words are stored locally in this browser.</div>
       </form>
     </div>
   </div>
@@ -703,959 +700,533 @@
   </div>
 
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <script>
-  const SUPABASE_URL = "https://yoczhajgmoktjgpxlopl.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvY3poYWpnbW9rdGpncHhsb3BsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNzA3MDksImV4cCI6MjA5MTk0NjcwOX0.zHalMNRECgNhWIVRdArPIv99prGZeZtqP6N5Wasq0n0";
+    const STORAGE_KEY = "flashcards_data";
 
-  const sb = (window.supabase && typeof window.supabase.createClient === "function")
-    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-    : null;
-
-  const STORAGE_PREFIX = "flashcards_state_v3";
-
-  const state = {
-    cards: [],
-    queue: [],
-    view: "practice",
-    flipped: false,
-    editingId: null,
-    groupMode: "all",
-    activeGroups: [],
-    deletedIds: {},
-    signedIn: false,
-    loginDismissed: false
-  };
-
-  let currentUser = null;
-  let lastLoadedUserId = null;
-  let authOverlay = null;
-  let authMessage = null;
-  let authEmail = null;
-  let authPassword = null;
-
-  const els = {
-    toggleViewBtn: document.getElementById("toggleViewBtn"),
-    groupFilterBtn: document.getElementById("groupFilterBtn"),
-    addWordBtn: document.getElementById("addWordBtn"),
-    authBtn: document.getElementById("authBtn"),
-    practiceView: document.getElementById("practiceView"),
-    bankView: document.getElementById("bankView"),
-    cardStage: document.getElementById("cardStage"),
-    flashcard: document.getElementById("flashcard"),
-    frontWord: document.getElementById("frontWord"),
-    backMeaning: document.getElementById("backMeaning"),
-    backExample: document.getElementById("backExample"),
-    answerPanel: document.getElementById("answerPanel"),
-    bankCount: document.getElementById("bankCount"),
-    bankList: document.getElementById("bankList"),
-    modalOverlay: document.getElementById("modalOverlay"),
-    modalTitle: document.getElementById("modalTitle"),
-    modalSub: document.getElementById("modalSub"),
-    wordForm: document.getElementById("wordForm"),
-    wordInput: document.getElementById("wordInput"),
-    meaningInput: document.getElementById("meaningInput"),
-    groupInput: document.getElementById("groupInput"),
-    exampleInput: document.getElementById("exampleInput"),
-    cancelModalBtn: document.getElementById("cancelModalBtn"),
-    groupsOverlay: document.getElementById("groupsOverlay"),
-    groupsList: document.getElementById("groupsList"),
-    allGroupsBtn: document.getElementById("allGroupsBtn"),
-    clearGroupsBtn: document.getElementById("clearGroupsBtn"),
-    closeGroupsBtn: document.getElementById("closeGroupsBtn"),
-    saveGroupsBtn: document.getElementById("saveGroupsBtn")
-  };
-
-  function uid() {
-    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
-  }
-
-  function clamp(n, min, max) {
-    return Math.max(min, Math.min(max, n));
-  }
-
-  function toNumber(value, fallback) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-  }
-
-  function normalizeGroup(value) {
-    const group = String(value || "").trim();
-    return group || "General";
-  }
-
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
-  }
-
-  function storageKey() {
-    return `${STORAGE_PREFIX}_${currentUser?.id || "guest"}`;
-  }
-
-  function hasCloudSync() {
-    return !!(sb && currentUser);
-  }
-
-  function normalizeCard(card, source = "local") {
-    const createdAt = toNumber(card?.createdAt, Date.now());
-    const updatedAt = toNumber(card?.updatedAt, createdAt);
-    const groupValue = card?.group_name ?? card?.group;
-
-    return {
-      id: String(card?.id || uid()),
-      word: String(card?.word || "").trim(),
-      meaning: String(card?.meaning || "").trim(),
-      example: String(card?.example || "").trim(),
-      group: normalizeGroup(groupValue),
-      level: clamp(toNumber(card?.level, 0), 0, 5),
-      createdAt,
-      updatedAt,
-      syncStatus: card?.syncStatus === "synced" ? "synced" : (source === "remote" ? "synced" : "dirty")
+    const state = {
+      cards: [],
+      queue: [],
+      view: "practice",
+      flipped: false,
+      editingId: null,
+      groupMode: "all",
+      activeGroups: [],
     };
-  }
 
-  function cardForCloud(card) {
-    const normal = normalizeCard(card);
-    return {
-      id: normal.id,
-      user_id: currentUser?.id,
-      word: normal.word,
-      meaning: normal.meaning,
-      example: normal.example,
-      group_name: normal.group,
-      level: normal.level,
-      createdAt: normal.createdAt,
-      updatedAt: normal.updatedAt
+    const els = {
+      toggleViewBtn: document.getElementById("toggleViewBtn"),
+      groupFilterBtn: document.getElementById("groupFilterBtn"),
+      addWordBtn: document.getElementById("addWordBtn"),
+      practiceView: document.getElementById("practiceView"),
+      bankView: document.getElementById("bankView"),
+      cardStage: document.getElementById("cardStage"),
+      flashcard: document.getElementById("flashcard"),
+      frontWord: document.getElementById("frontWord"),
+      backMeaning: document.getElementById("backMeaning"),
+      backExample: document.getElementById("backExample"),
+      answerPanel: document.getElementById("answerPanel"),
+      bankCount: document.getElementById("bankCount"),
+      bankList: document.getElementById("bankList"),
+      modalOverlay: document.getElementById("modalOverlay"),
+      modalTitle: document.getElementById("modalTitle"),
+      modalSub: document.getElementById("modalSub"),
+      wordForm: document.getElementById("wordForm"),
+      wordInput: document.getElementById("wordInput"),
+      meaningInput: document.getElementById("meaningInput"),
+      groupInput: document.getElementById("groupInput"),
+      exampleInput: document.getElementById("exampleInput"),
+      cancelModalBtn: document.getElementById("cancelModalBtn"),
+      groupsOverlay: document.getElementById("groupsOverlay"),
+      groupsList: document.getElementById("groupsList"),
+      allGroupsBtn: document.getElementById("allGroupsBtn"),
+      clearGroupsBtn: document.getElementById("clearGroupsBtn"),
+      closeGroupsBtn: document.getElementById("closeGroupsBtn"),
+      saveGroupsBtn: document.getElementById("saveGroupsBtn"),
     };
-  }
 
-  function readDeletedIds(raw) {
-    const next = {};
-    if (!raw) return next;
-    if (Array.isArray(raw)) {
-      raw.forEach((id) => { next[String(id)] = true; });
-      return next;
-    }
-    if (typeof raw === "object") {
-      Object.keys(raw).forEach((id) => {
-        if (raw[id]) next[String(id)] = true;
-      });
-    }
-    return next;
-  }
-
-  function getAllGroups() {
-    return [...new Set(state.cards.map((card) => normalizeGroup(card.group)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  }
-
-  function isAllGroupsMode() {
-    return state.groupMode !== "custom";
-  }
-
-  function getActiveGroupSet() {
-    return isAllGroupsMode() ? null : new Set(state.activeGroups.map(normalizeGroup));
-  }
-
-  function isCardInActiveGroups(card) {
-    const activeSet = getActiveGroupSet();
-    if (!activeSet) return true;
-    return activeSet.has(normalizeGroup(card.group));
-  }
-
-  function getVisibleCards() {
-    return state.cards.filter(isCardInActiveGroups);
-  }
-
-  function getCardById(id) {
-    return state.cards.find((card) => card.id === id) || null;
-  }
-
-  function rebuildQueue(excludeId = null) {
-    const ids = getVisibleCards()
-      .filter((card) => card.id !== excludeId)
-      .map((card) => card.id);
-    if (ids.length === 0 && excludeId) return [excludeId];
-    return ids;
-  }
-
-  function syncQueueWithCards() {
-    const next = [];
-    const seen = new Set();
-
-    for (const id of state.queue) {
-      if (seen.has(id)) continue;
-      const card = getCardById(id);
-      if (!card || !isCardInActiveGroups(card)) continue;
-      seen.add(id);
-      next.push(id);
+    function uid() {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+      return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
     }
 
-    for (const card of getVisibleCards()) {
-      if (seen.has(card.id)) continue;
-      seen.add(card.id);
-      next.push(card.id);
+    function clamp(n, min, max) {
+      return Math.max(min, Math.min(max, n));
     }
 
-    state.queue = next;
-    if (!state.queue.length && getVisibleCards().length) {
-      state.queue = rebuildQueue();
+    function normalizeGroup(value) {
+      const group = String(value || "").trim();
+      return group || "General";
     }
-  }
 
-  function sanitizeQueue() {
-    state.queue = state.queue.filter((id) => {
-      const card = getCardById(id);
-      return !!card && isCardInActiveGroups(card);
-    });
-  }
-
-  function currentCard() {
-    sanitizeQueue();
-    if (!state.queue.length && getVisibleCards().length) {
-      state.queue = rebuildQueue();
+    function getAllGroups() {
+      return [...new Set(state.cards.map((card) => normalizeGroup(card.group)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
     }
-    return state.queue.length ? getCardById(state.queue[0]) : null;
-  }
 
-  function spacingFor(answer, level) {
-    if (answer === "forgot") return 2;
-    if (answer === "hard") return 4 + clamp(level, 0, 2);
-    return 8 + clamp(level + Math.floor(level / 2), 0, 7);
-  }
-
-  function safeInsertIndex(queue, cardId, desiredIndex) {
-    let index = clamp(desiredIndex, 0, queue.length);
-    let lastSame = -1;
-    for (let i = 0; i < queue.length; i++) {
-      if (queue[i] === cardId) lastSame = i;
+    function isAllGroupsMode() {
+      return state.groupMode !== "custom";
     }
-    if (lastSame >= 0 && index <= lastSame + 1) index = lastSame + 2;
-    return clamp(index, 0, queue.length);
-  }
 
-  function updateLevels(card, answer) {
-    if (answer === "forgot") card.level = 0;
-    else if (answer === "hard") card.level = clamp((card.level || 0) + 1, 0, 5);
-    else if (answer === "easy") card.level = clamp((card.level || 0) + 2, 0, 5);
-    card.updatedAt = Date.now();
-    card.syncStatus = "dirty";
-  }
+    function getActiveGroupSet() {
+      return isAllGroupsMode() ? null : new Set(state.activeGroups.map(normalizeGroup));
+    }
 
-  function saveState() {
-    try {
-      localStorage.setItem(storageKey(), JSON.stringify({
-        cards: state.cards.map((card) => ({
-          id: String(card.id),
-          word: String(card.word),
-          meaning: String(card.meaning),
-          example: String(card.example),
+    function isCardInActiveGroups(card) {
+      const activeSet = getActiveGroupSet();
+      if (!activeSet) return true;
+      return activeSet.has(normalizeGroup(card.group));
+    }
+
+    function getVisibleCards() {
+      return state.cards.filter(isCardInActiveGroups);
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          state.cards = [];
+          state.queue = [];
+          state.groupMode = "all";
+          state.activeGroups = [];
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        const cards = Array.isArray(parsed) ? parsed : (parsed.cards || []);
+        state.cards = cards.map((card) => ({
+          id: String(card.id || uid()),
+          word: String(card.word || "").trim(),
+          meaning: String(card.meaning || "").trim(),
+          example: String(card.example || "").trim(),
           group: normalizeGroup(card.group),
-          level: clamp(toNumber(card.level, 0), 0, 5),
-          createdAt: toNumber(card.createdAt, Date.now()),
-          updatedAt: toNumber(card.updatedAt, toNumber(card.createdAt, Date.now())),
-          syncStatus: card.syncStatus === "synced" ? "synced" : "dirty"
-        })),
-        settings: {
-          groupMode: state.groupMode,
-          activeGroups: state.activeGroups,
-          view: state.view
-        },
-        queue: state.queue,
-        deletedIds: state.deletedIds,
-        savedAt: Date.now()
-      }));
-    } catch (error) {
-      console.warn("Local save failed:", error);
-    }
-  }
+          level: Number.isFinite(card.level) ? card.level : 0,
+          createdAt: Number.isFinite(card.createdAt) ? card.createdAt : Date.now(),
+        })).filter((card) => card.word && card.meaning);
 
-  function loadState() {
-    try {
-      const raw = localStorage.getItem(storageKey());
-      if (!raw) {
+        const settings = Array.isArray(parsed) ? {} : (parsed.settings || {});
+        state.groupMode = settings.groupMode === "custom" ? "custom" : "all";
+        state.activeGroups = Array.isArray(settings.activeGroups)
+          ? settings.activeGroups.map(normalizeGroup)
+          : [];
+        if (state.groupMode === "custom" && !state.activeGroups.length) {
+          state.groupMode = "all";
+        }
+        state.queue = rebuildQueue();
+      } catch {
         state.cards = [];
         state.queue = [];
         state.groupMode = "all";
         state.activeGroups = [];
-        state.deletedIds = {};
-        return;
       }
-
-      const parsed = JSON.parse(raw);
-      const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
-      const settings = parsed.settings || {};
-
-      state.cards = cards
-        .map((card) => normalizeCard(card))
-        .filter((card) => card.word && card.meaning);
-
-      state.groupMode = settings.groupMode === "custom" ? "custom" : "all";
-      state.activeGroups = Array.isArray(settings.activeGroups)
-        ? settings.activeGroups.map(normalizeGroup)
-        : [];
-      state.view = settings.view === "bank" ? "bank" : "practice";
-
-      if (state.groupMode === "custom" && !state.activeGroups.length) {
-        state.groupMode = "all";
-      }
-
-      state.deletedIds = readDeletedIds(parsed.deletedIds);
-      state.queue = Array.isArray(parsed.queue) ? parsed.queue.filter((id) => typeof id === "string") : rebuildQueue();
-      syncQueueWithCards();
-    } catch (error) {
-      console.warn("Local load failed:", error);
-      state.cards = [];
-      state.queue = [];
-      state.groupMode = "all";
-      state.activeGroups = [];
-      state.deletedIds = {};
-    }
-  }
-
-  function ensureAuthUI() {
-    let overlay = document.getElementById("authOverlay");
-    if (overlay) {
-      authOverlay = overlay;
-      authMessage = overlay.querySelector("#authMessage");
-      authEmail = overlay.querySelector("#authEmail");
-      authPassword = overlay.querySelector("#authPassword");
-      return overlay;
     }
 
-    overlay = document.createElement("div");
-    overlay.id = "authOverlay";
-    overlay.className = "modal-overlay";
-    overlay.style.zIndex = "40";
-    overlay.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
-        <h3 id="authTitle">Login</h3>
-        <p id="authMessage" class="sub">Use the same account on every device.</p>
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        cards: state.cards,
+        settings: {
+          groupMode: state.groupMode,
+          activeGroups: state.activeGroups,
+        },
+        savedAt: Date.now(),
+      }));
+    }
 
-        <div class="field">
-          <label for="authEmail">Email</label>
-          <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" />
-        </div>
+    function rebuildQueue(excludeId = null) {
+      const ids = getVisibleCards()
+        .filter((card) => card.id !== excludeId)
+        .map((card) => card.id);
+      if (ids.length === 0 && excludeId) return [excludeId];
+      return ids;
+    }
 
-        <div class="field">
-          <label for="authPassword">Password</label>
-          <input id="authPassword" type="password" autocomplete="current-password" placeholder="Password" />
-        </div>
+    function getCardById(id) {
+      return state.cards.find((card) => card.id === id) || null;
+    }
 
-        <div class="modal-actions">
-          <button type="button" id="loginBtn" class="modal-action save">Login</button>
-          <button type="button" id="signupBtn" class="modal-action cancel">Sign up</button>
-        </div>
+    function sanitizeQueue() {
+      state.queue = state.queue.filter((id) => {
+        const card = getCardById(id);
+        return !!card && isCardInActiveGroups(card);
+      });
+    }
 
-        <div class="tiny">If sign-up says check your email, confirm it once in Supabase Auth first.</div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    authOverlay = overlay;
-    authMessage = overlay.querySelector("#authMessage");
-    authEmail = overlay.querySelector("#authEmail");
-    authPassword = overlay.querySelector("#authPassword");
-
-    const loginBtn = overlay.querySelector("#loginBtn");
-    const signupBtn = overlay.querySelector("#signupBtn");
-
-    const submit = async (mode) => {
-      if (!sb) {
-        setAuthMessage("Supabase is not loaded.");
-        return;
+    function currentCard() {
+      sanitizeQueue();
+      if (!state.queue.length && getVisibleCards().length) {
+        state.queue = rebuildQueue();
       }
+      return state.queue.length ? getCardById(state.queue[0]) : null;
+    }
 
-      const email = authEmail.value.trim();
-      const password = authPassword.value;
-      if (!email || !password) {
-        setAuthMessage("Enter email and password.");
-        return;
+    function spacingFor(answer, level) {
+      if (answer === "forgot") return 2;
+      if (answer === "hard") return 4 + clamp(level, 0, 2);
+      return 8 + clamp(level + Math.floor(level / 2), 0, 7);
+    }
+
+    function safeInsertIndex(queue, cardId, desiredIndex) {
+      let index = clamp(desiredIndex, 0, queue.length);
+      let lastSame = -1;
+      for (let i = 0; i < queue.length; i++) {
+        if (queue[i] === cardId) lastSame = i;
       }
+      if (lastSame >= 0 && index <= lastSame + 1) {
+        index = lastSame + 2;
+      }
+      return clamp(index, 0, queue.length);
+    }
 
-      try {
-        if (mode === "signup") {
-          const { data, error } = await sb.auth.signUp({ email, password });
-          if (error) {
-            setAuthMessage(error.message || "Sign up failed.");
-            return;
-          }
-          if (!data?.session) {
-            setAuthMessage("Check your email, then sign in.");
-            return;
-          }
+    function updateLevels(card, answer) {
+      if (answer === "forgot") {
+        card.level = 0;
+      } else if (answer === "hard") {
+        card.level = clamp((card.level || 0) + 1, 0, 5);
+      } else if (answer === "easy") {
+        card.level = clamp((card.level || 0) + 2, 0, 5);
+      }
+    }
+
+    function renderPractice() {
+      const card = currentCard();
+      const hasCards = !!card;
+      const visibleCount = getVisibleCards().length;
+
+      els.cardStage.hidden = !hasCards;
+      els.answerPanel.hidden = !hasCards;
+      els.answerPanel.classList.toggle("show", hasCards && state.flipped);
+
+      if (!hasCards) {
+        els.flashcard.classList.remove("flipped");
+        if (state.cards.length && !visibleCount) {
+          els.frontWord.textContent = "No cards in these groups";
+          els.backMeaning.textContent = "Choose different groups";
+          els.backExample.textContent = "Tap Groups to change what appears in practice.";
         } else {
-          const { error } = await sb.auth.signInWithPassword({ email, password });
-          if (error) {
-            setAuthMessage("Wrong password or email.");
-            return;
-          }
+          els.frontWord.textContent = "Add a word";
+          els.backMeaning.textContent = "Meaning";
+          els.backExample.textContent = "Example sentence";
         }
-      } catch (error) {
-        setAuthMessage(error?.message || "Login failed.");
+        return;
       }
-    };
 
-    loginBtn.addEventListener("click", () => { void submit("login"); });
-    signupBtn.addEventListener("click", () => { void submit("signup"); });
-
-    [authEmail, authPassword].forEach((input) => {
-      input.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          void submit("login");
-        }
-      });
-    });
-
-    return overlay;
-  }
-
-  function setAuthMessage(text) {
-    ensureAuthUI();
-    authMessage.textContent = text;
-  }
-
-  function openAuthOverlay(message = "") {
-    ensureAuthUI();
-    if (message) setAuthMessage(message);
-    authOverlay.classList.add("show");
-    authOverlay.setAttribute("aria-hidden", "false");
-    window.setTimeout(() => authEmail?.focus(), 0);
-  }
-
-  function closeAuthOverlay() {
-    if (!authOverlay) return;
-    authOverlay.classList.remove("show");
-    authOverlay.setAttribute("aria-hidden", "true");
-  }
-
-  function updateAuthButton() {
-    if (!els.authBtn) return;
-    els.authBtn.textContent = currentUser ? "Sign out" : "Login";
-  }
-
-  function cardSorter(a, b) {
-    if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
-    return a.word.localeCompare(b.word);
-  }
-
-  function mergeCardsFromCloud(cloudCards) {
-    const remoteMap = new Map();
-    (cloudCards || []).forEach((raw) => {
-      const card = normalizeCard(raw, "remote");
-      if (!card.word || !card.meaning) return;
-      if (state.deletedIds[card.id]) return;
-      remoteMap.set(card.id, card);
-    });
-
-    const localMap = new Map(state.cards.map((card) => [card.id, normalizeCard(card)]));
-    const nextMap = new Map();
-
-    remoteMap.forEach((remoteCard, id) => {
-      const localCard = localMap.get(id);
-      if (localCard && localCard.syncStatus === "dirty") nextMap.set(id, localCard);
-      else nextMap.set(id, remoteCard);
-    });
-
-    localMap.forEach((localCard, id) => {
-      if (nextMap.has(id)) return;
-      if (localCard.syncStatus === "dirty") nextMap.set(id, localCard);
-    });
-
-    state.cards = [...nextMap.values()].sort(cardSorter);
-    syncQueueWithCards();
-    state.flipped = false;
-    saveState();
-    renderApp();
-  }
-
-  async function loadRemoteCards() {
-    if (!hasCloudSync()) return;
-    const userId = currentUser.id;
-    try {
-      const { data, error } = await sb
-        .from("flashcards")
-        .select("id,user_id,word,meaning,example,group_name,level,createdAt,updatedAt")
-        .eq("user_id", userId)
-        .order("createdAt", { ascending: true });
-
-      if (error) throw error;
-      if (currentUser?.id !== userId) return;
-      mergeCardsFromCloud(data || []);
-      lastLoadedUserId = userId;
-    } catch (error) {
-      console.warn("Cloud load failed:", error);
-    }
-  }
-
-  async function syncCardToCloud(card) {
-    if (!hasCloudSync()) return;
-
-    try {
-      const payload = cardForCloud(card);
-      const { error } = await sb.from("flashcards").upsert(payload, { onConflict: "id" });
-      if (error) throw error;
-      const local = getCardById(card.id);
-      if (local) local.syncStatus = "synced";
-      saveState();
-    } catch (error) {
-      console.warn("Cloud save failed:", error);
-    }
-  }
-
-  async function deleteCardFromCloud(cardId) {
-    if (!hasCloudSync()) return;
-    try {
-      const { error } = await sb.from("flashcards").delete().eq("id", cardId).eq("user_id", currentUser.id);
-      if (error) throw error;
-    } catch (error) {
-      console.warn("Cloud delete failed:", error);
-    }
-  }
-
-  function syncPendingLocalCardsToCloud() {
-    if (!hasCloudSync()) return;
-    state.cards.forEach((card) => {
-      if (card.syncStatus === "dirty" && !state.deletedIds[card.id]) {
-        void syncCardToCloud(card);
-      }
-    });
-  }
-
-  async function handleSession(session) {
-    const user = session?.user || null;
-    const nextUserId = user?.id || null;
-
-    currentUser = user;
-    state.signedIn = !!user;
-    updateAuthButton();
-
-    if (!user) {
-      lastLoadedUserId = null;
-      loadState();
-      renderApp();
-      openAuthOverlay("Log in with the same account on every device.");
-      return;
+      els.frontWord.textContent = card.word;
+      els.backMeaning.textContent = card.meaning;
+      els.backExample.textContent = card.example || "No example added.";
+      els.flashcard.classList.toggle("flipped", state.flipped);
     }
 
-    if (nextUserId === lastLoadedUserId && state.cards.length) {
-      closeAuthOverlay();
-      renderApp();
-      return;
-    }
+    function renderBank() {
+      els.bankCount.textContent = `${state.cards.length} saved word${state.cards.length === 1 ? "" : "s"}`;
+      els.bankList.innerHTML = "";
 
-    closeAuthOverlay();
-    loadState();
-    renderApp();
-    await loadRemoteCards();
-    syncPendingLocalCardsToCloud();
-    renderApp();
-  }
-
-  async function initAuth() {
-    ensureAuthUI();
-    updateAuthButton();
-    openAuthOverlay("Log in with the same account on every device.");
-
-    if (!sb) {
-      setAuthMessage("Supabase client failed to load.");
-      return;
-    }
-
-    try {
-      const { data } = await sb.auth.getSession();
-      await handleSession(data?.session || null);
-    } catch (error) {
-      console.warn("Session check failed:", error);
-      openAuthOverlay("Login could not start.");
-    }
-
-    sb.auth.onAuthStateChange((_event, session) => {
-      void handleSession(session);
-    });
-  }
-
-  function renderPractice() {
-    const card = currentCard();
-    const hasCards = !!card;
-    const visibleCount = getVisibleCards().length;
-
-    els.cardStage.hidden = !hasCards;
-    els.answerPanel.hidden = !hasCards;
-    els.answerPanel.classList.toggle("show", hasCards && state.flipped);
-
-    if (!hasCards) {
-      els.flashcard.classList.remove("flipped");
-      if (state.cards.length && !visibleCount) {
-        els.frontWord.textContent = "No cards in these groups";
-        els.backMeaning.textContent = "Choose different groups";
-        els.backExample.textContent = "Tap Groups to change what appears in practice.";
-      } else if (!currentUser) {
-        els.frontWord.textContent = "Log in";
-        els.backMeaning.textContent = "to sync cards";
-        els.backExample.textContent = "Create an account or sign in to use cloud sync.";
-      } else {
-        els.frontWord.textContent = "Add a word";
-        els.backMeaning.textContent = "Meaning";
-        els.backExample.textContent = "Example sentence";
-      }
-      return;
-    }
-
-    els.frontWord.textContent = card.word;
-    els.backMeaning.textContent = card.meaning;
-    els.backExample.textContent = card.example || "No example added.";
-    els.flashcard.classList.toggle("flipped", state.flipped);
-  }
-
-  function renderBank() {
-    els.bankCount.textContent = `${state.cards.length} saved word${state.cards.length === 1 ? "" : "s"}`;
-    els.bankList.innerHTML = "";
-
-    const frag = document.createDocumentFragment();
-    state.cards.forEach((card) => {
-      const row = document.createElement("div");
-      row.className = "row";
-      row.setAttribute("role", "button");
-      row.setAttribute("tabindex", "0");
-      row.setAttribute("aria-label", `Edit ${card.word}`);
-      row.innerHTML = `
-        <div class="row-main">
-          <div class="w">${escapeHtml(card.word)}</div>
-          <div class="row-sub">
-            <div class="m">${escapeHtml(card.meaning)}</div>
-            <div class="group-tag">${escapeHtml(normalizeGroup(card.group))}</div>
+      const frag = document.createDocumentFragment();
+      state.cards.forEach((card) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.setAttribute("role", "button");
+        row.setAttribute("tabindex", "0");
+        row.setAttribute("aria-label", `Edit ${card.word}`);
+        row.innerHTML = `
+          <div class="row-main">
+            <div class="w">${escapeHtml(card.word)}</div>
+            <div class="row-sub">
+              <div class="m">${escapeHtml(card.meaning)}</div>
+              <div class="group-tag">${escapeHtml(normalizeGroup(card.group))}</div>
+            </div>
           </div>
-        </div>
-        <div class="actions">
-          <button type="button" class="delete-btn" aria-label="Delete ${escapeHtml(card.word)}">
-            <i class="fa-solid fa-trash-can"></i>
-          </button>
-        </div>
-      `;
-      row.addEventListener("click", (event) => {
-        if (event.target.closest(".delete-btn")) return;
-        openModal(card);
-      });
-      row.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
+          <div class="actions">
+            <button type="button" class="delete-btn" aria-label="Delete ${escapeHtml(card.word)}">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>
+        `;
+        row.addEventListener("click", (event) => {
+          if (event.target.closest(".delete-btn")) return;
           openModal(card);
-        }
+        });
+        row.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openModal(card);
+          }
+        });
+        row.querySelector(".delete-btn").addEventListener("click", (event) => {
+          event.stopPropagation();
+          deleteCard(card.id);
+        });
+        frag.appendChild(row);
       });
-      row.querySelector(".delete-btn").addEventListener("click", (event) => {
-        event.stopPropagation();
-        deleteCard(card.id);
-      });
-      frag.appendChild(row);
-    });
-    els.bankList.appendChild(frag);
-  }
-
-  function renderGroupButton() {
-    if (state.groupMode !== "custom") {
-      els.groupFilterBtn.textContent = "Groups: All";
-      return;
-    }
-    const count = state.activeGroups.length;
-    els.groupFilterBtn.textContent = count ? `Groups: ${count}` : "Groups: None";
-  }
-
-  function renderApp() {
-    els.practiceView.classList.toggle("active", state.view === "practice");
-    els.bankView.classList.toggle("active", state.view === "bank");
-    els.toggleViewBtn.textContent = state.view === "practice" ? "Word Bank" : "Practice";
-    renderGroupButton();
-    updateAuthButton();
-
-    if (state.view === "practice") renderPractice();
-    else renderBank();
-  }
-
-  function openModal(card = null) {
-    state.editingId = card ? card.id : null;
-    els.modalTitle.textContent = card ? "Edit word" : "Add word";
-    els.modalSub.textContent = card ? "Update the saved card." : "Save a new word to the queue.";
-    els.wordInput.value = card?.word || "";
-    els.meaningInput.value = card?.meaning || "";
-    els.groupInput.value = card?.group || "General";
-    els.exampleInput.value = card?.example || "";
-    els.modalOverlay.classList.add("show");
-    els.modalOverlay.setAttribute("aria-hidden", "false");
-    window.setTimeout(() => els.wordInput.focus(), 0);
-  }
-
-  function closeModal() {
-    els.modalOverlay.classList.remove("show");
-    els.modalOverlay.setAttribute("aria-hidden", "true");
-    state.editingId = null;
-    els.wordForm.reset();
-  }
-
-  function openGroupsModal() {
-    renderGroupsModal();
-    els.groupsOverlay.classList.add("show");
-    els.groupsOverlay.setAttribute("aria-hidden", "false");
-  }
-
-  function closeGroupsModal() {
-    els.groupsOverlay.classList.remove("show");
-    els.groupsOverlay.setAttribute("aria-hidden", "true");
-  }
-
-  function renderGroupsModal(selected = null) {
-    const groups = getAllGroups();
-    const selectedSet = selected ? new Set(selected) : (state.groupMode === "custom" ? new Set(state.activeGroups) : new Set(groups));
-    els.groupsList.innerHTML = "";
-
-    if (!groups.length) {
-      const empty = document.createElement("div");
-      empty.className = "group-option";
-      empty.innerHTML = `<strong>No groups yet</strong><span>Add words to create groups</span>`;
-      els.groupsList.appendChild(empty);
-      return;
+      els.bankList.appendChild(frag);
     }
 
-    groups.forEach((group) => {
-      const item = document.createElement("label");
-      item.className = "group-option";
-      item.innerHTML = `
-        <div>
-          <strong>${escapeHtml(group)}</strong>
-          <span>Group</span>
-        </div>
-        <input type="checkbox" value="${escapeHtml(group)}" ${selectedSet.has(group) ? "checked" : ""} />
-      `;
-      els.groupsList.appendChild(item);
-    });
-  }
-
-  function readSelectedGroupsFromModal() {
-    return [...els.groupsList.querySelectorAll('input[type="checkbox"]')]
-      .filter((input) => input.checked)
-      .map((input) => normalizeGroup(input.value));
-  }
-
-  async function addOrUpdateCard({ word, meaning, group, example }) {
-    const cleaned = {
-      word: word.trim(),
-      meaning: meaning.trim(),
-      group: normalizeGroup(group),
-      example: example.trim()
-    };
-
-    if (!cleaned.word || !cleaned.meaning) return;
-
-    if (state.editingId) {
-      const card = getCardById(state.editingId);
-      if (card) {
-        card.word = cleaned.word;
-        card.meaning = cleaned.meaning;
-        card.group = cleaned.group;
-        card.example = cleaned.example;
-        card.updatedAt = Date.now();
-        card.syncStatus = "dirty";
-        delete state.deletedIds[card.id];
-        saveState();
-        void syncCardToCloud(card);
+    function renderGroupButton() {
+      if (state.groupMode !== "custom") {
+        els.groupFilterBtn.textContent = "Groups: All";
+        return;
       }
-    } else {
-      const now = Date.now();
-      const newCard = {
-        id: uid(),
-        word: cleaned.word,
-        meaning: cleaned.meaning,
-        group: cleaned.group,
-        example: cleaned.example,
-        level: 0,
-        createdAt: now,
-        updatedAt: now,
-        syncStatus: "dirty"
+      const count = state.activeGroups.length;
+      els.groupFilterBtn.textContent = count ? `Groups: ${count}` : "Groups: None";
+    }
+
+    function renderApp() {
+      els.practiceView.classList.toggle("active", state.view === "practice");
+      els.bankView.classList.toggle("active", state.view === "bank");
+      els.toggleViewBtn.textContent = state.view === "practice" ? "Word Bank" : "Practice";
+      els.addWordBtn.style.display = "inline-flex";
+      renderGroupButton();
+
+      if (state.view === "practice") {
+        renderPractice();
+      } else {
+        renderBank();
+      }
+    }
+
+    function openModal(card = null) {
+      state.editingId = card ? card.id : null;
+      els.modalTitle.textContent = card ? "Edit word" : "Add word";
+      els.modalSub.textContent = card ? "Update the saved card." : "Save a new word to the queue.";
+      els.wordInput.value = card?.word || "";
+      els.meaningInput.value = card?.meaning || "";
+      els.groupInput.value = card?.group || "General";
+      els.exampleInput.value = card?.example || "";
+      els.modalOverlay.classList.add("show");
+      els.modalOverlay.setAttribute("aria-hidden", "false");
+      window.setTimeout(() => els.wordInput.focus(), 0);
+    }
+
+    function closeModal() {
+      els.modalOverlay.classList.remove("show");
+      els.modalOverlay.setAttribute("aria-hidden", "true");
+      state.editingId = null;
+      els.wordForm.reset();
+    }
+
+    function openGroupsModal() {
+      renderGroupsModal();
+      els.groupsOverlay.classList.add("show");
+      els.groupsOverlay.setAttribute("aria-hidden", "false");
+    }
+
+    function closeGroupsModal() {
+      els.groupsOverlay.classList.remove("show");
+      els.groupsOverlay.setAttribute("aria-hidden", "true");
+    }
+
+    function renderGroupsModal(selected = null) {
+      const groups = getAllGroups();
+      const selectedSet = selected ? new Set(selected) : (state.groupMode === "custom" ? new Set(state.activeGroups) : new Set(groups));
+      els.groupsList.innerHTML = "";
+
+      if (!groups.length) {
+        const empty = document.createElement("div");
+        empty.className = "group-option";
+        empty.innerHTML = `<strong>No groups yet</strong><span>Add words to create groups</span>`;
+        els.groupsList.appendChild(empty);
+        return;
+      }
+
+      groups.forEach((group) => {
+        const item = document.createElement("label");
+        item.className = "group-option";
+        item.innerHTML = `
+          <div>
+            <strong>${escapeHtml(group)}</strong>
+            <span>Group</span>
+          </div>
+          <input type="checkbox" value="${escapeHtml(group)}" ${selectedSet.has(group) ? "checked" : ""} />
+        `;
+        els.groupsList.appendChild(item);
+      });
+    }
+
+    function readSelectedGroupsFromModal() {
+      return [...els.groupsList.querySelectorAll('input[type="checkbox"]')]
+        .filter((input) => input.checked)
+        .map((input) => normalizeGroup(input.value));
+    }
+
+    function addOrUpdateCard({ word, meaning, group, example }) {
+      const cleaned = {
+        word: word.trim(),
+        meaning: meaning.trim(),
+        group: normalizeGroup(group),
+        example: example.trim(),
       };
 
-      state.cards.push(newCard);
-      state.queue.push(newCard.id);
-      delete state.deletedIds[newCard.id];
+      if (!cleaned.word || !cleaned.meaning) return;
+
+      if (state.editingId) {
+        const card = getCardById(state.editingId);
+        if (card) {
+          card.word = cleaned.word;
+          card.meaning = cleaned.meaning;
+          card.group = cleaned.group;
+          card.example = cleaned.example;
+        }
+      } else {
+        const newCard = {
+          id: uid(),
+          word: cleaned.word,
+          meaning: cleaned.meaning,
+          group: cleaned.group,
+          example: cleaned.example,
+          level: 0,
+          createdAt: Date.now(),
+        };
+        state.cards.push(newCard);
+        state.queue.push(newCard.id);
+      }
+
       saveState();
-      void syncCardToCloud(newCard);
+      state.queue = state.queue.filter((id) => {
+        const card = getCardById(id);
+        return !!card && isCardInActiveGroups(card);
+      });
+      if (!state.queue.length && getVisibleCards().length) state.queue = rebuildQueue();
+      closeModal();
+      renderApp();
     }
 
-    syncQueueWithCards();
-    if (!state.queue.length && getVisibleCards().length) state.queue = rebuildQueue();
-    closeModal();
-    renderApp();
-  }
+    function answerCurrent(answer) {
+      const card = currentCard();
+      if (!card) return;
 
-  function answerCurrent(answer) {
-    const card = currentCard();
-    if (!card) return;
+      updateLevels(card, answer);
 
-    updateLevels(card, answer);
-    void syncCardToCloud(card);
+      state.queue.shift();
 
-    state.queue.shift();
-    state.queue = state.queue.filter((id) => {
-      const queuedCard = getCardById(id);
-      return !!queuedCard && queuedCard.id !== card.id && isCardInActiveGroups(queuedCard);
+      // Keep only one scheduled copy of the current card in the queue.
+      state.queue = state.queue.filter((id) => {
+        const queuedCard = getCardById(id);
+        return !!queuedCard && queuedCard.id !== card.id && isCardInActiveGroups(queuedCard);
+      });
+
+      if (!state.queue.length) {
+        state.queue = rebuildQueue(card.id);
+      }
+
+      const desiredIndex = spacingFor(answer, card.level);
+      const insertIndex = safeInsertIndex(state.queue, card.id, Math.min(desiredIndex, state.queue.length));
+      state.queue.splice(insertIndex, 0, card.id);
+
+      state.flipped = false;
+      saveState();
+      renderApp();
+    }
+
+    function deleteCard(cardId) {
+      const card = getCardById(cardId);
+      if (!card) return;
+      const ok = window.confirm(`Delete “${card.word}”?`);
+      if (!ok) return;
+
+      state.cards = state.cards.filter((item) => item.id !== cardId);
+      state.queue = state.queue.filter((id) => id !== cardId);
+      if (!state.queue.length && state.cards.length) state.queue = rebuildQueue();
+      if (!state.cards.length) state.flipped = false;
+      saveState();
+      renderApp();
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    els.toggleViewBtn.addEventListener("click", () => {
+      state.view = state.view === "practice" ? "bank" : "practice";
+      renderApp();
     });
 
-    if (!state.queue.length) state.queue = rebuildQueue(card.id);
+    els.groupFilterBtn.addEventListener("click", () => openGroupsModal());
+    els.addWordBtn.addEventListener("click", () => openModal());
 
-    const desiredIndex = spacingFor(answer, card.level);
-    const insertIndex = safeInsertIndex(state.queue, card.id, Math.min(desiredIndex, state.queue.length));
-    state.queue.splice(insertIndex, 0, card.id);
+    els.cancelModalBtn.addEventListener("click", closeModal);
 
-    state.flipped = false;
-    saveState();
-    renderApp();
-  }
+    els.modalOverlay.addEventListener("click", (event) => {
+      if (event.target === els.modalOverlay) closeModal();
+    });
 
-  function deleteCard(cardId) {
-    const card = getCardById(cardId);
-    if (!card) return;
-    const ok = window.confirm(`Delete “${card.word}”?`);
-    if (!ok) return;
-
-    state.deletedIds[cardId] = true;
-    state.cards = state.cards.filter((item) => item.id !== cardId);
-    state.queue = state.queue.filter((id) => id !== cardId);
-
-    if (!state.queue.length && state.cards.length) state.queue = rebuildQueue();
-    if (!state.cards.length) state.flipped = false;
-
-    saveState();
-    void deleteCardFromCloud(cardId);
-    renderApp();
-  }
-
-  function signOutUser() {
-    if (!sb) return;
-    void sb.auth.signOut();
-  }
-
-  els.toggleViewBtn.addEventListener("click", () => {
-    state.view = state.view === "practice" ? "bank" : "practice";
-    saveState();
-    renderApp();
-  });
-
-  els.groupFilterBtn.addEventListener("click", () => openGroupsModal());
-  els.addWordBtn.addEventListener("click", () => {
-    if (!currentUser) {
-      openAuthOverlay("Log in first, then add words.");
-      return;
-    }
-    openModal();
-  });
-
-  els.authBtn.addEventListener("click", () => {
-    if (currentUser) {
-      signOutUser();
-    } else {
-      openAuthOverlay("Log in with the same account on every device.");
-    }
-  });
-
-  els.cancelModalBtn.addEventListener("click", closeModal);
-  els.modalOverlay.addEventListener("click", (event) => {
-    if (event.target === els.modalOverlay) closeModal();
-  });
-
-  els.closeGroupsBtn.addEventListener("click", closeGroupsModal);
-
-  els.allGroupsBtn.addEventListener("click", () => {
-    state.groupMode = "all";
-    state.activeGroups = [];
-    renderGroupsModal();
-  });
-
-  els.clearGroupsBtn.addEventListener("click", () => {
-    state.groupMode = "custom";
-    state.activeGroups = [];
-    renderGroupsModal([]);
-  });
-
-  els.saveGroupsBtn.addEventListener("click", () => {
-    const groups = readSelectedGroupsFromModal();
-    if (groups.length === getAllGroups().length && groups.length > 0) {
+    els.closeGroupsBtn.addEventListener("click", closeGroupsModal);
+    els.allGroupsBtn.addEventListener("click", () => {
       state.groupMode = "all";
       state.activeGroups = [];
-    } else {
-      state.groupMode = "custom";
-      state.activeGroups = groups;
-    }
-    saveState();
-    closeGroupsModal();
-    state.queue = rebuildQueue();
-    state.flipped = false;
-    renderApp();
-  });
-
-  els.groupsOverlay.addEventListener("click", (event) => {
-    if (event.target === els.groupsOverlay) closeGroupsModal();
-  });
-
-  els.wordForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    void addOrUpdateCard({
-      word: els.wordInput.value,
-      meaning: els.meaningInput.value,
-      group: els.groupInput.value,
-      example: els.exampleInput.value
+      renderGroupsModal();
     });
-  });
+    els.clearGroupsBtn.addEventListener("click", () => {
+      state.groupMode = "custom";
+      state.activeGroups = [];
+      renderGroupsModal([]);
+    });
+    els.saveGroupsBtn.addEventListener("click", () => {
+      const groups = readSelectedGroupsFromModal();
+      if (groups.length === getAllGroups().length && groups.length > 0) {
+        state.groupMode = "all";
+        state.activeGroups = [];
+      } else {
+        state.groupMode = "custom";
+        state.activeGroups = groups;
+      }
+      saveState();
+      closeGroupsModal();
+      state.queue = rebuildQueue();
+      state.flipped = false;
+      renderApp();
+    });
 
-  els.flashcard.addEventListener("click", () => {
-    if (!currentCard()) return;
-    state.flipped = !state.flipped;
-    renderPractice();
-  });
+    els.groupsOverlay.addEventListener("click", (event) => {
+      if (event.target === els.groupsOverlay) closeGroupsModal();
+    });
 
-  els.flashcard.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
+    els.wordForm.addEventListener("submit", (event) => {
       event.preventDefault();
+      addOrUpdateCard({
+        word: els.wordInput.value,
+        meaning: els.meaningInput.value,
+        group: els.groupInput.value,
+        example: els.exampleInput.value,
+      });
+    });
+
+    els.flashcard.addEventListener("click", () => {
       if (!currentCard()) return;
       state.flipped = !state.flipped;
       renderPractice();
-    }
-  });
+    });
 
-  els.answerPanel.querySelectorAll(".answer-btn").forEach((btn) => {
-    btn.addEventListener("click", () => answerCurrent(btn.dataset.answer));
-  });
+    els.flashcard.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (!currentCard()) return;
+        state.flipped = !state.flipped;
+        renderPractice();
+      }
+    });
 
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      if (els.modalOverlay.classList.contains("show")) closeModal();
-      if (els.groupsOverlay.classList.contains("show")) closeGroupsModal();
-    }
-  });
+    els.answerPanel.querySelectorAll(".answer-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        answerCurrent(btn.dataset.answer);
+      });
+    });
 
-  window.addEventListener("online", () => {
-    syncPendingLocalCardsToCloud();
-  });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && els.modalOverlay.classList.contains("show")) {
+        closeModal();
+      }
+    });
 
-  loadState();
-  renderApp();
-  initAuth();
+    loadState();
+    renderApp();
   </script>
 
 <script>
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", async () => {
-    try {
-      const reg = await navigator.serviceWorker.register("./service-worker.js");
-      console.log("Service worker registered", reg);
-    } catch (err) {
-      console.error("Service worker failed", err);
-    }
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js');
   });
 }
 </script>
